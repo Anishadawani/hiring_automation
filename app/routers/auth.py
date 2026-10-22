@@ -1,19 +1,14 @@
 
-"""Registration and login API routes."""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Role, User
-from app.schemas.auth import (
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    UserResponse,
-)
+from app.deps import get_current_user
+from app.models import CandidateProfile, Role, User
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
 from app.security import (
     DUMMY_HASH,
     constant_time_equals,
@@ -22,91 +17,56 @@ from app.security import (
     verify_password,
 )
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def register(
-    data: RegisterRequest,
-    db: Session = Depends(get_db),
-):
-    email = data.email.lower().strip()
-
-    existing_user = db.scalar(
-        select(User).where(User.email == email)
-    )
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists.",
-        )
-
-    try:
-        role = Role(data.role.lower())
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid account role.",
-        )
-
-    if role == Role.recruiter:
-        settings = get_settings()
-        if not data.invite_code or not constant_time_equals(
-            data.invite_code,
-            settings.recruiter_invite_code,
-        ):
+@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    if payload.role == Role.recruiter:
+        expected = get_settings().recruiter_invite_code
+        provided = payload.invite_code or ""
+        if not expected or not constant_time_equals(provided, expected):
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="A valid recruiter invite code is required.",
+                status.HTTP_403_FORBIDDEN,
+                "Recruiter registration requires a valid invite code.",
             )
 
-    user = User(
-        email=email,
-        full_name=data.full_name.strip(),
-        password_hash=hash_password(data.password),
-        role=role,
-    )
+    if db.scalar(select(User).where(User.email == payload.email)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.")
 
-    db.add(user)
-    db.commit()
+    user = User(
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        full_name=payload.full_name,
+        role=payload.role,
+    )
+    try:
+        db.add(user)
+        db.flush()
+        if user.role == Role.candidate:
+            db.add(CandidateProfile(user_id=user.id))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.")
     db.refresh(user)
     return user
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(
-    data: LoginRequest,
-    db: Session = Depends(get_db),
-):
-    email = data.email.lower().strip()
-
-    user = db.scalar(
-        select(User).where(User.email == email)
-    )
-
-    if user is None:
-        verify_password(data.password, DUMMY_HASH)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.email == payload.email))
+    password_ok = verify_password(payload.password, user.password_hash if user else DUMMY_HASH)
+    if user is None or not password_ok or not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
+            status.HTTP_401_UNAUTHORIZED,
+            "Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-
-    if not verify_password(data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account is disabled.",
-        )
-
     token = create_access_token(user.id, user.role.value)
+    return TokenResponse(access_token=token, user=UserOut.model_validate(user))
 
-    return TokenResponse(access_token=token)
+
+@router.get("/me", response_model=UserOut)
+def me(user: User = Depends(get_current_user)):
+    return user

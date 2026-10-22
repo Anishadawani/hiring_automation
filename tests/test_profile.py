@@ -1,55 +1,78 @@
-def register_candidate(client):
-    response = client.post(
-        "/auth/register",
-        json={
-            "email": "candidate@example.com",
-            "password": "StrongPassword123!",
-            "full_name": "Test Candidate",
-            "role": "candidate",
-        },
-    )
-    assert response.status_code == 201
 
-    login_response = client.post(
-        "/auth/login",
-        json={
-            "email": "candidate@example.com",
-            "password": "StrongPassword123!",
-        },
-    )
-    return login_response.json()["access_token"]
+VALID_PROFILE = {
+    "headline": "Backend developer",
+    "location": "Indore, India",
+    "summary": "Building APIs.",
+    "skills": ["Python", " python ", "FastAPI", ""],
+    "education": [
+        {
+            "institution": "Example University",
+            "degree": "B.Tech",
+            "start_year": 2018,
+            "end_year": 2022,
+        }
+    ],
+    "experience": [
+        {
+            "company": "Acme",
+            "title": "Developer",
+            "start_date": "2022-07-01",
+            "end_date": None,
+        }
+    ],
+}
 
 
-def test_candidate_can_get_profile(client):
-    token = register_candidate(client)
+def test_new_candidate_has_empty_profile(client, candidate_headers):
+    r = client.get("/api/candidate/profile", headers=candidate_headers)
+    assert r.status_code == 200
+    assert r.json()["skills"] == []
+    assert r.json()["resume_filename"] is None
 
-    response = client.get(
+
+def test_update_profile_normalises_and_persists(client, candidate_headers):
+    r = client.put(
         "/api/candidate/profile",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=candidate_headers,
+        json=VALID_PROFILE,
     )
+    assert r.status_code == 200
+    assert r.json()["skills"] == ["Python", "FastAPI"]
 
-    assert response.status_code == 200
-
-
-def test_candidate_can_update_profile(client):
-    token = register_candidate(client)
-
-    response = client.put(
+    again = client.get(
         "/api/candidate/profile",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "headline": "Python Developer",
-            "location": "Indore",
-            "skills": ["Python", "SQL"],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["headline"] == "Python Developer"
-    assert "Python" in response.json()["skills"]
+        headers=candidate_headers,
+    ).json()
+    assert again["headline"] == "Backend developer"
+    assert again["education"][0]["institution"] == "Example University"
+    assert again["experience"][0]["start_date"] == "2022-07-01"
 
 
-def test_profile_requires_authentication(client):
-    response = client.get("/api/candidate/profile")
+def test_invalid_education_years_rejected(client, candidate_headers):
+    bad = {
+        **VALID_PROFILE,
+        "education": [
+            {
+                "institution": "X",
+                "degree": "Y",
+                "start_year": 2022,
+                "end_year": 2018,
+            }
+        ],
+    }
+    assert client.put(
+        "/api/candidate/profile",
+        headers=candidate_headers,
+        json=bad,
+    ).status_code == 422
 
-    assert response.status_code == 401
+
+def test_recruiter_cannot_use_candidate_profile(client, recruiter_headers):
+    assert client.get(
+        "/api/candidate/profile",
+        headers=recruiter_headers,
+    ).status_code == 403
+
+
+def test_profile_requires_login(client):
+    assert client.get("/api/candidate/profile").status_code == 401
