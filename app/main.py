@@ -1,4 +1,3 @@
-
 """HireSense AI - FastAPI application entry point."""
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +10,14 @@ from app.database import get_db
 from app.routers import (
     auth,
     candidate_profile,
+    resume,
 )
 
 settings = get_settings()
 
 app = FastAPI(
     title="HireSense AI",
-    version="0.2.1",
+    version="0.2.2",
     description="Recruitment platform API. AI output is advisory and supports human review.",
 )
 
@@ -32,6 +32,7 @@ app.add_middleware(
 for module in (
     auth,
     candidate_profile,
+    resume,
 ):
     app.include_router(module.router)
 
