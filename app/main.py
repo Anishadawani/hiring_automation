@@ -10,6 +10,8 @@ from app.database import get_db
 from app.routers import (
     auth,
     candidate_profile,
+    jobs,
+    openings,
     resume,
 )
 
@@ -17,7 +19,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="HireSense AI",
-    version="0.2.2",
+    version="0.2.3",
     description="Recruitment platform API. AI output is advisory and supports human review.",
 )
 
@@ -33,6 +35,8 @@ for module in (
     auth,
     candidate_profile,
     resume,
+    openings,
+    jobs,
 ):
     app.include_router(module.router)
 
