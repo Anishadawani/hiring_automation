@@ -1,37 +1,81 @@
-"""FastAPI service: POST a resume + job description, get a structured screening result."""
-import logging
+"""HireSense AI - FastAPI application entry point."""
+
 import os
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
+from app.config import get_settings
+from app.database import get_db
+from app.routers import auth, candidate_profile
 from app import screener
 
-logging.basicConfig(level=logging.INFO)
-app = FastAPI(title="AI Hiring Automation", version="1.0.0")
+settings = get_settings()
 
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+app = FastAPI(
+    title="HireSense AI",
+    version="0.1.0",
+    description=(
+        "Recruitment platform API. "
+        "AI output is advisory and supports human review."
+    ),
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+app.include_router(auth.router)
+app.include_router(candidate_profile.router)
 
 
-def check_key(x_api_key: str | None = Header(default=None)):
-    expected = os.getenv("APP_API_KEY")
-    if expected and x_api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-
-@app.get("/health")
-def health():
+@app.get("/health", tags=["system"])
+def legacy_health():
     return {"status": "ok"}
 
 
-@app.post("/screen", response_model=screener.ScreeningResult, dependencies=[Depends(check_key)])
-async def screen(job_description: str = Form(...), resume: UploadFile = File(...)):
-    data = await resume.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Resume larger than 5 MB")
-    if not job_description.strip():
-        raise HTTPException(status_code=400, detail="job_description is empty")
+@app.get("/api/health", tags=["system"])
+def health(db: Session = Depends(get_db)):
     try:
-        text = screener.extract_text(resume.filename, data)
-        return screener.screen_resume(text, job_description)
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        raise HTTPException(503, "Database unavailable.")
+
+    return {
+        "status": "ok",
+        "environment": settings.environment,
+        "ai_configured": bool(settings.anthropic_api_key),
+    }
+
+
+@app.post("/screen", tags=["Screening"])
+async def screen_resume(
+    job_description: str = Form(...),
+    resume: UploadFile = File(...),
+):
+    configured_key = os.getenv("APP_API_KEY")
+
+    if configured_key and resume.headers.get("authorization") != configured_key:
+        raise HTTPException(status_code=401, detail="Invalid API key.")
+
+    content = await resume.read()
+
+    try:
+        resume_text = screener.extract_text(resume.filename or "resume.txt", content)
+        result = await run_in_threadpool(
+            screener.screen_resume,
+            resume_text,
+            job_description,
+        )
+        return result.model_dump()
     except screener.ScreeningError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    

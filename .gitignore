@@ -1,4 +1,35 @@
+
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
+
+# Private candidate information
 drafts.csv
+uploads/
+
+# Python
 __pycache__/
+*.py[cod]
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Frontend
+node_modules/
+frontend/dist/
+_starter_backup/
