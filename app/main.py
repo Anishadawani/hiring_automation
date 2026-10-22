@@ -8,10 +8,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.routers import (
+    applications,
     auth,
     candidate_profile,
     jobs,
     openings,
+    recruiter_applications,
+    recruiter_dashboard,
     resume,
 )
 
@@ -19,7 +22,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="HireSense AI",
-    version="0.2.3",
+    version="0.2.4",
     description="Recruitment platform API. AI output is advisory and supports human review.",
 )
 
@@ -36,7 +39,10 @@ for module in (
     candidate_profile,
     resume,
     openings,
+    applications,
     jobs,
+    recruiter_applications,
+    recruiter_dashboard,
 ):
     app.include_router(module.router)
 
