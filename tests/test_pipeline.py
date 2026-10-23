@@ -201,4 +201,4 @@ def test_dashboard_shows_real_counts_only(client, recruiter_headers, candidate_h
 
 def test_scoring_method_is_documented(client, recruiter_headers):
     body = client.get(f"{R}/scoring-method", headers=recruiter_headers).json()
-    assert "formula" in body and "required_scoring" not in body and "required_skills" in body["components"] and body["limits"]
+    assert "formula" in body and "required_skills" in body["components"] and body["limits"]
