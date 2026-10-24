@@ -1,0 +1,33 @@
+import type { components } from "./schema";
+
+type S = components["schemas"];
+
+export type User = S["UserOut"];
+export type Profile = S["ProfileOut"];
+export type ProfileUpdate = S["ProfileUpdate"];
+export type Opening = S["OpeningOut"];
+export type Job = S["JobOut"];
+export type JobInput = S["JobCreate"];
+export type CandidateApplication = S["CandidateApplicationOut"];
+export type ApplicationSummary = S["ApplicationSummary"];
+export type ApplicationDetail = S["ApplicationDetail"];
+export type Screening = S["ScreeningOut"];
+export type AIReview = S["AIReviewOut"];
+export type InterviewQuestion = S["InterviewQuestionOut"];
+export type Stage = S["Stage"];
+export type Dashboard = S["DashboardOut"];
+export type AssessmentSummary = S["AssessmentSummary"];
+export type AssessmentDetail = S["AssessmentDetail"];
+export type AssessmentInput = S["AssessmentIn"];
+export type QuestionInput = S["QuestionIn"];
+export type RubricCriterion = S["RubricCriterion"];
+export type AttemptSummary = S["AttemptSummary"];
+export type AttemptResult = S["AttemptResult"];
+export type CandidateTask = S["CandidateTaskOut"];
+export type Attempt = S["AttemptOut"];
+export type Interview = S["InterviewOut"];
+export type RecruiterInterview = S["RecruiterInterviewRow"];
+export type CandidateInterview = S["CandidateInterviewOut"];
+export type ConsentNotice = S["ConsentNoticeOut"];
+export type EmailDraft = S["EmailDraftOut"];
+export type JoinTicket = S["JoinTicketOut"];
