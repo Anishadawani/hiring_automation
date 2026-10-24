@@ -332,6 +332,30 @@ class Interview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class InterviewConsent(Base):
+    """A person's recorded choice about one interview. The latest value wins.
+
+    kind "attendance": granted=True means the candidate confirmed, False means declined.
+    kind "live_av": granted=True means the candidate agreed to share camera/microphone live.
+    Every change is also written to the activity log, which keeps the history.
+    """
+
+    __tablename__ = "interview_consents"
+    __table_args__ = (UniqueConstraint("interview_id", "user_id", "kind", name="uq_interview_consent"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interview_id: Mapped[int] = mapped_column(
+        ForeignKey("interviews.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(30))
+    granted: Mapped[bool] = mapped_column(Boolean)
+    notice_version: Mapped[Optional[str]] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class InterviewQuestion(Base):
     """AI-suggested interview questions, each tied to evidence from the resume."""
 
